@@ -1,0 +1,42 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build-and-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v2
+
+    - name: Set up .NET
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: 6.0.x
+
+    - name: Restore Dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore
+
+    - name: TruffleHog - Secrets Scanning
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: .
+
+    - name: Run Bandit - Python Security Linter
+      uses: tj-actions/bandit@v1.2
+      with:
+        path: .
+
+    - name: Check for Unsigned Commits
+      run: |
+        git log --pretty=format:"%h %G? %aN %s" | grep -v "G"
