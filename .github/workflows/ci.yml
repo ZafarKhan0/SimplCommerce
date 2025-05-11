@@ -1,4 +1,4 @@
-name: CI Pipeline
+name: CI Build and Security Checks
 
 on:
   push:
@@ -6,37 +6,64 @@ on:
       - develop
   pull_request:
     branches:
-      - master
+      - develop
 
 jobs:
-  build-and-scan:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Set up .NET
-      uses: actions/setup-dotnet@v2
-      with:
-        dotnet-version: 6.0.x
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.0.x'
 
-    - name: Restore Dependencies
-      run: dotnet restore
+      - name: Restore dependencies
+        run: dotnet restore
 
-    - name: Build
-      run: dotnet build --no-restore
+      - name: Build project
+        run: dotnet build --no-restore
 
-    - name: TruffleHog - Secrets Scanning
-      uses: trufflesecurity/trufflehog@main
-      with:
-        path: .
+      - name: Run tests
+        run: dotnet test --no-build --verbosity normal
 
-    - name: Run Bandit - Python Security Linter
-      uses: tj-actions/bandit@v1.2
-      with:
-        path: .
+  secrets_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Check for Unsigned Commits
-      run: |
-        git log --pretty=format:"%h %G? %aN %s" | grep -v "G"
+      - name: Run TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: .
+
+  sonar_scan:
+    name: Run SonarCloud analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.0.x'
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+
+      - name: SonarCloud Scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+          dotnet sonarscanner begin /k:"<your_project_key>" /o:"<your_org_key>" /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+          dotnet build
+          dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
